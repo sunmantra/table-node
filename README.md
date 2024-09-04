@@ -3,4 +3,3 @@
 
 **npm start** -  запуск.
 
-**npm run build** -  билд проекта.
