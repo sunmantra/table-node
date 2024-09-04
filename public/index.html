@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="stylesheet" type="text/css" href="/app.css" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Montserrat:ital,wght@0,100..900;1,100..900&display=swap"
+      rel="stylesheet"
+    />
+    <title>Интерактивная табличка</title>
+  </head>
+
+  <body>
+    <section class="content-wrapper">
+      <div class="table">
+        <div class="table_title">
+          <p contenteditable="true" id="date">30 января 2024</p>
+        </div>
+        <div class="table_title">
+          <p contenteditable="true" id="shift">Смена 2</p>
+        </div>
+        <div class="table_title col_span_4">
+          <p contenteditable="true" id="master">
+            <span class="gray_txt">Мастер:</span> Иванов И. И.
+          </p>
+        </div>
+        <div class="table_title">
+          <p contenteditable="true" id="code">РПТКМ-120</p>
+        </div>
+
+        <div>
+          <p contenteditable="true" id="staff">Персонал</p>
+        </div>
+        <div class="col_span_4">
+          <p contenteditable="true" id="staff-count">100500 человек</p>
+        </div>
+        <div class="row_span_3 col_span_2">
+          <p contenteditable="true" id="comment">
+            Комментарий в 3-5 строчек, который тоже можно редактировать.
+          </p>
+        </div>
+
+        <div class="row_span_2">
+          <p contenteditable="true" id="equipment">КТП 2000 321</p>
+        </div>
+        <div class="col_span_2">
+          <p contenteditable="true" id="status">Работает</p>
+        </div>
+        <div>
+          <p contenteditable="true" id="quantity">24</p>
+        </div>
+        <div>
+          <p contenteditable="true" id="spi">SPI 3432</p>
+        </div>
+
+        <div>
+          <p contenteditable="true" id="performance">98.4%</p>
+        </div>
+        <div class="col_span_3">
+          <p>
+            <span contenteditable="true" id="condition"
+              >Функционирует, но не бьет</span
+            >
+          </p>
+        </div>
+      </div>
+
+      <!-- Прогресс-бар и таймер -->
+      <div class="progress-bar-container">
+        <div class="progress-bar"></div>
+      </div>
+      <div class="timer">
+        Отправка данных через <span id="timer-count">5</span> секунд
+      </div>
+    </section>
+
+    <script>
+      const ws = new WebSocket("ws://localhost:3000");
+      let timeoutId;
+      let countdownId;
+      let progressBar;
+      let timerCount;
+      let countdownTime = 5; 
+      let progressBarContainer = document.querySelector(
+        ".progress-bar-container"
+      );
+      let timerDisplay = document.getElementById("timer-count");
+
+      const originalData = new Map(); // исходные данные ячеек
+
+      ws.onmessage = (event) => {
+        const { selector, content } = JSON.parse(event.data);
+        document.querySelector(selector).textContent = content;
+      };
+
+      document.querySelectorAll('[contenteditable="true"]').forEach((cell) => {
+       
+        originalData.set(cell, cell.textContent);
+
+        cell.addEventListener("input", (event) => {
+          validateInput(event.target); // Валидация данных при вводе
+          clearTimeout(timeoutId); // Очищаем таймер ожидания
+          clearInterval(countdownId); // Очищаем таймер обратного отсчета
+          resetProgressBar(); // Сбрасываем прогресс-бар и таймер
+        });
+
+        cell.addEventListener("blur", () => {
+          const originalContent = originalData.get(cell);
+          const currentContent = cell.textContent;
+
+          if (originalContent === currentContent) {
+           
+            return;
+          }
+
+          clearTimeout(timeoutId); 
+          clearInterval(countdownId); 
+          resetProgressBar(); 
+
+          
+          timeoutId = setTimeout(() => {
+            startCountdown(); 
+          }, 5000);
+        });
+      });
+
+      function validateInput(cell) {
+        const cellId = cell.id;
+        const content = cell.textContent;
+
+        if (cellId === "quantity") {
+          // Валидация для числовых значений
+          if (!/^\d*$/.test(content)) {
+            cell.textContent = content.replace(/[^\d]/g, "");
+          }
+        } else if (cellId === "performance") {
+          // Валидация для процентов
+          if (!/^\d*\.?\d*%?$/.test(content)) {
+            cell.textContent = content.replace(/[^\d.]/g, "") + "%";
+          } else if (!content.includes("%")) {
+            cell.textContent += "%";
+          }
+        } else if (cellId === "master") {
+          // Валидация для фамилии и инициалов (только кириллица и точки)
+          if (!/^[А-Яа-яЁё. ]*$/.test(content)) {
+            cell.textContent = content.replace(/[^А-Яа-яЁё. ]/g, "");
+          }
+        }
+      }
+
+      function startCountdown() {
+        progressBarContainer.style.display = "block"; 
+        let progress = 0;
+        countdownTime = 10; 
+        timerDisplay.textContent = countdownTime;
+
+        countdownId = setInterval(() => {
+          progress += 10; 
+          countdownTime--;
+          timerDisplay.textContent = countdownTime;
+          document.querySelector(".progress-bar").style.width = `${progress}%`;
+
+          if (countdownTime === 0) {
+            clearInterval(countdownId);
+            sendData(); 
+          }
+        }, 1000);
+      }
+
+      function resetProgressBar() {
+        progressBarContainer.style.display = "none"; 
+        document.querySelector(".progress-bar").style.width = "0%";
+        timerDisplay.textContent = "";
+      }
+
+      function sendData() {
+        document.querySelectorAll('[contenteditable="true"]').forEach((cell) => {
+            const selector = getSelector(cell);
+            const content = cell.textContent;
+
+          
+            ws.send(JSON.stringify({ selector, content }));
+
+          
+            const originalContent = originalData.get(cell);
+            if (originalContent !== content) {
+              console.log(`ID: ${cell.id}, Content: ${content}`);
+            }
+
+            originalData.set(cell, content); 
+          });
+      }
+
+      function getSelector(element) {
+        let selector = "";
+        while (element && element.nodeType === 1) {
+          let id = element.id ? "#" + element.id : "";
+          let className = element.className
+            ? "." + element.className.split(" ").join(".")
+            : "";
+          let tagName = element.tagName.toLowerCase();
+          selector = " " + tagName + id + className + selector;
+          element = element.parentElement;
+        }
+        return selector.trim();
+      }
+    </script>
+  </body>
+</html>
